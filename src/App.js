@@ -13,14 +13,13 @@ class KeyboardApp extends React.Component{
   constructor(props) {
     super(props);
     this.state = {
-      txt: "",
       lastButtondownEvent: null,
     };
     this.txtRef = React.createRef();
     this.childRef = React.createRef();
     this.copyToClipboardSvg = <CopyToClipboardIcon width="35" height="35"/>
     this.clearAllTextSvg = <ClearAllTextIcon width="20" height="20" />
-    this.handleTextChange = this.handleTextChange.bind(this);
+    // this.handleTextChange = this.handleTextChange.bind(this);
     this.handleButtonClick = this.handleButtonClick.bind(this);
     this.handleCopyToClipboard = this.handleCopyToClipboard.bind(this);
     this.handleKeydown = this.handleKeydown.bind(this);
@@ -32,46 +31,27 @@ class KeyboardApp extends React.Component{
     ele.focus();
   }
   
-  handleTextChange(event){
-    this.setState({txt: event.target.value});
-  }
-  
   handleButtonClick(chr){
     const ele = this.txtRef.current;
-    const start = ele.selectionStart;
-    const end = ele.selectionEnd;
-    this.setState(prevState => {
-      return({
-        txt: prevState.txt.slice(0, start) + chr + prevState.txt.slice(end)
-      })
-    }, 
-      () => {
-      ele.focus();
-      ele.selectionStart = start + 1;
-      ele.selectionEnd = end + 1;
-    })
+    ele.focus();
+    document.execCommand("insertText", false, chr);
   }
   
   handleClearAllText(){
-    this.setState({txt: ""});
+    const ele = this.txtRef.current;
+    ele.focus();
+    ele.select();
+    document.execCommand("delete");
   }
   
   handleCopyToClipboard(){
     const ele = this.txtRef.current;
-    const start = ele.selectionStart;
-    const end = ele.selectionEnd;
-    
     ele.focus();
     ele.select();
-    
-    try {
-      var successful = document.execCommand("copy");
-    } catch (err) {
-      console.error("Oops, unable to copy", err);
-    }
 
-    ele.selectionStart = start;
-    ele.selectionEnd = end;
+    document.execCommand("copy");
+
+    ele.selectionStart = ele.selectionEnd;
   }
   
   handleKeydown(event){
@@ -92,11 +72,10 @@ class KeyboardApp extends React.Component{
       <div className="app">
         <div className="display">
           <textarea
-            onChange={this.handleTextChange}
             onKeyDown={this.handleKeydown}
-            value={this.state.txt}
             dir="rtl"
             ref={this.txtRef}
+            defaultValue=""
           />
         </div>
         <Keyboard
@@ -146,7 +125,7 @@ class Keyboard extends React.Component{
                    "obj")
     this.keyboard_mapping_arr_idx =
       this.make_idx(keyboard_mapping, 
-                    ["language", "layout", "keyboard",                              "keyCode"], "arr")
+                    ["language", "layout", "keyboard", "keyCode"], "arr")
     this.characters_idx =
       this.make_idx(characters,
                     ["id"],
