@@ -3,7 +3,12 @@ import React from 'react';
 
 function App() {
   return (
-    <KeyboardApp />
+    <KeyboardApp
+      language="hebrew"
+      ref_language="english"
+      layout="standard"
+      keyboard="macbookpro"
+    />
   );
 }
 
@@ -13,99 +18,18 @@ class KeyboardApp extends React.Component{
   constructor(props) {
     super(props);
     this.state = {
-      lastButtondownEvent: null,
+      activeKeys: new Set(),
     };
     this.txtRef = React.createRef();
-    this.childRef = React.createRef();
     this.copyToClipboardSvg = <CopyToClipboardIcon width="35" height="35"/>
     this.clearAllTextSvg = <ClearAllTextIcon width="20" height="20" />
-    // this.handleTextChange = this.handleTextChange.bind(this);
-    this.handleButtonClick = this.handleButtonClick.bind(this);
-    this.handleCopyToClipboard = this.handleCopyToClipboard.bind(this);
-    this.handleKeydown = this.handleKeydown.bind(this);
-    this.handleClearAllText = this.handleClearAllText.bind(this);
-  }
+    this.onCopyToClipboard = this.onCopyToClipboard.bind(this);
+    this.handleKeyDown = this.handleKeyDown.bind(this);
+    this.handleKeyUp = this.handleKeyUp.bind(this);
+    this.pressKey = this.pressKey.bind(this);
+    this.releaseKey = this.releaseKey.bind(this);
+    this.onClearAllText = this.onClearAllText.bind(this);
   
-  componentDidMount() {
-    var ele = this.txtRef.current;
-    ele.focus();
-  }
-  
-  handleButtonClick(chr){
-    const ele = this.txtRef.current;
-    ele.focus();
-    document.execCommand("insertText", false, chr);
-  }
-  
-  handleClearAllText(){
-    const ele = this.txtRef.current;
-    ele.focus();
-    ele.select();
-    document.execCommand("delete");
-  }
-  
-  handleCopyToClipboard(){
-    const ele = this.txtRef.current;
-    ele.focus();
-    ele.select();
-
-    document.execCommand("copy");
-
-    ele.selectionStart = ele.selectionEnd;
-  }
-  
-  handleKeydown(event){
-    const nativeEvent = event.nativeEvent
-    const {code, ctrlKey, shiftKey, altKey, metaKey} = nativeEvent
-    const keyboard = this.childRef.current
-    if(keyboard.key_is_mapped(code, ctrlKey, shiftKey, altKey, metaKey)){
-      event.preventDefault()
-    }
-    this.setState({lastButtondownEvent: nativeEvent});
-    setTimeout(() => {
-      this.setState({lastButtondownEvent: null});
-    }, 200)
-  }
-  
-  render(){
-    return (
-      <div className="app">
-        <div className="display">
-          <textarea
-            onKeyDown={this.handleKeydown}
-            dir="rtl"
-            ref={this.txtRef}
-            defaultValue=""
-          />
-        </div>
-        <Keyboard
-          language="hebrew"
-          ref_language="english"
-          layout="standard"
-          keyboard="macbookpro"
-          onButtonClick={this.handleButtonClick}
-          copyToClipboardSvg={this.copyToClipboardSvg}
-          onCopyToClipboard={this.handleCopyToClipboard}
-          clearAllTextSvg={this.clearAllTextSvg}
-          onClearAllText={this.handleClearAllText}
-          lastButtondownEvent={this.state.lastButtondownEvent}
-          ref={this.childRef}
-        />
-      </div>
-    )
-  }
-}
-
-class Keyboard extends React.Component{
-  constructor(props){
-    super(props)
-    this.state = {
-      ctrlKey: false,
-      shiftKey: false,
-      altKey: false,
-      metaKey: false,
-    };
-    this.handleButtonClick = this.handleButtonClick.bind(this);
     this.getKeyFace = this.getKeyFace.bind(this);
     this.KEY_MARGIN = 5
     this.KEYBOARD_PADDING = 10
@@ -165,7 +89,7 @@ class Keyboard extends React.Component{
     this.kb_width = kb_size[0] + 2*this.KEYBOARD_PADDING + 2*this.KEYBOARD_BORDER
     this.kb_height = kb_size[1] + 2*this.KEYBOARD_PADDING + 2*this.KEYBOARD_BORDER
   }
-  
+
   /* creates an index from an array of objects
      can also create multi-dimensional indices.
      
@@ -220,40 +144,45 @@ class Keyboard extends React.Component{
     return idx;
   }
   
-  /* returns true if the key is mapped on this Keyboard */
-  key_is_mapped(code, ctrlKey, shiftKey, altKey, metaKey){
-    return Boolean(this.get_idx(this.keyboard_mapping_idx, [this.props.language, this.props.layout, this.props.keyboard, code, ctrlKey, shiftKey, altKey, metaKey]))
+  componentDidMount() {
+    var ele = this.txtRef.current;
+    ele.focus();
   }
   
-  componentDidUpdate(prevProps) {
-    /* Check that lastButtondownEvent has changed and not something else */
-    if (this.props.lastButtondownEvent && this.props.lastButtondownEvent !== prevProps.lastButtondownEvent) {
-      const {code, ctrlKey, shiftKey, altKey, metaKey} = this.props.lastButtondownEvent
-      const key_mapping = 
-              this.get_idx(this.keyboard_mapping_idx, [this.props.language, this.props.layout, this.props.keyboard, code, ctrlKey, shiftKey, altKey, metaKey])
-      if(key_mapping){
-        let chr = this.characters_idx[key_mapping.charId]
-        if(chr.action_type === "function"){
-          this.props[chr.action_value]()
-        }
-        else{
-          this.props.onButtonClick(chr.display_value)
-        }
-      }      
-    }
+  onClearAllText(){
+    const ele = this.txtRef.current;
+    ele.focus();
+    ele.select();
+    document.execCommand("delete");
   }
   
-  handleButtonClick(event){
+  onCopyToClipboard(){
+    const ele = this.txtRef.current;
+    ele.focus();
+    ele.select();
+
+    document.execCommand("copy");
+
+    ele.selectionStart = ele.selectionEnd;
+  }
+
+  pressKey({code, ctrlKey=false, shiftKey=false,
+      altKey=false, metaKey=false}){
+
+    this.setState(prev => ({
+      activeKeys: new Set(prev.activeKeys).add(code)
+    }));
+
     const key_mapping = 
                 this.get_idx(this.keyboard_mapping_idx,
                              [this.props.language,
                               this.props.layout,
                               this.props.keyboard,
-                              event.target.id,
-                              this.state.ctrlKey,
-                              this.state.shiftKey,
-                              this.state.altKey,
-                              this.state.metaKey,
+                              code,
+                              ctrlKey,
+                              shiftKey,
+                              altKey,
+                              metaKey,
                              ])
     if(key_mapping){
       let chr = this.characters_idx[key_mapping.charId]
@@ -261,15 +190,45 @@ class Keyboard extends React.Component{
               chr.display_value :
               this.props[chr.display_value])
       if(chr.action_type === "function"){
-        this.props[chr.action_value]()
+        this[chr.action_value]()
       }
       else{
-        this.props.onButtonClick(display_value)
+        const ele = this.txtRef.current;
+        ele.focus();
+        document.execCommand("insertText", false, display_value);
       }
+      return true;
     }
-    
+    return false;
+  }
+
+  releaseKey({ code }){
+    this.setState(prev => {
+      const next = new Set(prev.activeKeys);
+      next.delete(code);
+      return { activeKeys: next };
+    });
   }
   
+  handleKeyDown(event){
+    const { code, ctrlKey, shiftKey, altKey, metaKey } = event.nativeEvent;
+    const handled = this.pressKey({
+      code,
+      ctrlKey,
+      shiftKey,
+      altKey,
+      metaKey
+    });
+
+    if(handled) event.preventDefault();
+  }
+
+  handleKeyUp(event){
+    const { code } = event.nativeEvent;
+    this.releaseKey({code});
+  }
+  
+
   getKeyFace(key){
     let key_face_arr = []
     let key_map_arr = this.get_idx(
@@ -284,19 +243,16 @@ class Keyboard extends React.Component{
         let chr = this.characters_idx[key_map_row.charId]
         let display_value = (chr.display_type === "text" ?
                              chr.display_value :
-                             this.props[chr.display_value])
+                             this[chr.display_value])
         let tooltip = chr.tooltip
-        key_face_arr.push(
-          <div
-            style={{...this.keyslots_idx[key_map_row.keyslot].css,
-              order: key_map_row.keyslot_order,
-              pointerEvents: "none"}}
-            title={tooltip}
-            key={key_map_row.keyslot_order}
-            >
-            {display_value}
-          </div>
-        )
+        key_face_arr.push({
+          display_value,
+          action_type: chr.action_type,
+          action_value: chr.action_value,
+          css: this.keyslots_idx[key_map_row.keyslot].css,
+          order: key_map_row.keyslot_order,
+          tooltip,
+        });
       }
       
       if(key_map_row.keyslot_ref && this.props.ref_language){
@@ -311,59 +267,151 @@ class Keyboard extends React.Component{
         let chr = this.characters_idx[ref_map_row.charId]
         let display_value = (chr.display_type === "text" ?
                              chr.display_value :
-                             this.props[chr.display_value])
+                             this[chr.display_value])
         let tooltip = chr.tooltip
-        key_face_arr.push(
-          <div
-            style={{...this.keyslots_idx[key_map_row.keyslot_ref].css,
-                   order: key_map_row.keyslot_ref_order,
-                   pointerEvents: "none"}}
-            title={tooltip}
-            key={key_map_row.keyslot_ref_order}
-            >
-            {display_value}
-          </div>
-        )
+        key_face_arr.push({
+            display_value,
+            action_type: chr.action_type,
+            action_value: chr.action_value,
+            css: this.keyslots_idx[key_map_row.keyslot_ref].css,
+            order: key_map_row.keyslot_ref_order,
+            tooltip,
+        });
       }
     }
     return key_face_arr
   }
   
-  get_keyboard(keys, class_name, width, height, key_group){
+  get_keyboard(keys, code, width, height, group){
+    return ({
+      type: "group",
+      code,
+      width,
+      height,
+      group,
+      keys: keys
+        .filter(key => key.group === group)
+        .map(key => {
+          const key_spec =
+                  this.mac_key_spec_idx[key.key_spec_id]
+          return(key.type === "key" ?
+            ({
+              type: key.type,
+              code: key.code,
+              width: key_spec.width + key_spec.units,
+              height: key_spec.height + key_spec.units,
+              group: key.group,
+              face: this.getKeyFace(key)
+            }) :
+            this.get_keyboard(keys, key.code, 
+                          key_spec.width + key_spec.units,
+                          key_spec.height + key_spec.units,
+                          key.code)
+            )
+          }),
+    });
+  }
+  
+  render(){
+    return (
+      <div className="app">
+        <div className="display">
+          <textarea
+            onKeyDown={this.handleKeyDown}
+            onKeyUp={this.handleKeyUp}
+            dir="rtl"
+            ref={this.txtRef}
+            defaultValue=""
+          />
+        </div>
+        <Keyboard
+          data={this.get_keyboard(
+            this.keyboard_codes_idx[this.props.keyboard],
+            "keyboard",
+            this.kb_width + "px",
+            this.kb_height + "px",
+            null
+          )}
+          activeKeys={this.state.activeKeys}
+          onButtonClick={this.pressKey}
+          onButtonRelease={this.releaseKey}
+        />
+      </div>
+    )
+  }
+}
+
+class Keyboard extends React.Component{
+  constructor(props){
+    super(props);
+
+    this.handleButtonClick = this.handleButtonClick.bind(this);
+    this.handleButtonRelease = this.handleButtonRelease.bind(this);
+  }
+  
+  handleButtonClick(event){
+    this.props.onButtonClick({code: event.target.id})
+  }
+
+  handleButtonRelease(event){
+    this.props.onButtonRelease({code: event.target.id})
+  }
+  
+  getKeyFace(key){
+    let key_face_arr = key?.face;
+    
+    if(!key_face_arr) return null
+    let key_face_elements_arr = [];
+    
+    for(let key_face_row of key_face_arr){
+      key_face_elements_arr.push(
+        <div
+          style={{...key_face_row.css,
+            order: key_face_row.order,
+            pointerEvents: "none"}}
+          title={key_face_row.tooltip}
+          key={key_face_row.order}
+        >
+          {key_face_row.display_value}
+        </div>
+      );
+    }
+    return key_face_elements_arr
+  }
+
+  get_keyboard(keys, code, width, height, group){
+    console.log("keys = ", keys, "code = ", code, "width = ", width,
+      "height = ", height, "group = ", group);
     return(
       <div
-        className={class_name}
+        className={code}
         style={{width: width, height: height}}
-        key={key_group}
+        key={group}
       >
         {keys
-          .filter(key => key.group === key_group)
           .map(key => {
-            const key_spec =
-                    this.mac_key_spec_idx[key.key_spec_id]
-
-            let classname = key.type === "key" ? "key" : key.code
-            let evt = this.props.lastButtondownEvent
-            let background_color = (evt && evt.code === key.code ?
+            let background_color = (this.props.activeKeys.has(key.code) ?
                                    "lightgreen" : "white")
 
             return(key.type === "key" ?
                   (<div
-                     onClick={this.handleButtonClick}
-                     className={classname}
+                     onMouseDown={this.handleButtonClick}
+                     onMouseUp={this.handleButtonRelease}
+                     onMouseLeave={this.handleButtonRelease}
+                     className={key.type === "key" ? "key" : key.code}
                      key={key.code}
                      id={key.code}
                      style={{
-                      width: key_spec.width + key_spec.units,
-                      height: key_spec.height + key_spec.units,
+                      width: key.width,
+                      height: key.height,
                       backgroundColor: background_color,
                      }}
                   >
                   {this.getKeyFace(key)}
                   </div>) :
-                  this.get_keyboard(keys, key.code, 
-                                key_spec.width + key_spec.units,
-                                key_spec.height + key_spec.units,
+                  this.get_keyboard(key.keys, key.code, 
+                                key.width,
+                                key.height,
                                 key.code)
             )
         }
@@ -373,13 +421,10 @@ class Keyboard extends React.Component{
   }
   
   render(){
+    let {keys, code, width, height, group} = this.props.data;
     return(
       this.get_keyboard(
-        this.keyboard_codes_idx[this.props.keyboard],
-        "keyboard",
-        this.kb_width + "px",
-        this.kb_height + "px",
-        null
+        keys, code, width, height, group
       )
     )
   }
